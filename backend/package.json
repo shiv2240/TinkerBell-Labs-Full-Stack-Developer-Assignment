@@ -1,0 +1,20 @@
+{
+  "name": "safe-device-settings-backend",
+  "version": "1.0.0",
+  "description": "Backend API server and validation engine for Safe Device Settings Update",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "backend": "node server.js",
+    "dev": "node server.js",
+    "test": "node --test test/applyUpdate.test.js",
+    "demo": "node src/example.js"
+  },
+  "keywords": [
+    "safe-settings",
+    "concurrency",
+    "validation"
+  ],
+  "author": "",
+  "license": "ISC"
+}

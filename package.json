@@ -1,0 +1,20 @@
+{
+  "name": "safe-device-settings-update",
+  "version": "1.0.0",
+  "description": "Safe partial settings updates for learning devices with optimistic concurrency and validation",
+  "scripts": {
+    "start": "npm start --prefix backend",
+    "backend": "npm start --prefix backend",
+    "frontend": "npm run dev --prefix frontend",
+    "build:frontend": "npm run build --prefix frontend",
+    "demo": "npm run demo --prefix backend",
+    "test": "npm test --prefix backend"
+  },
+  "keywords": [
+    "optimistic-concurrency",
+    "validation",
+    "settings-update"
+  ],
+  "author": "",
+  "license": "ISC"
+}
