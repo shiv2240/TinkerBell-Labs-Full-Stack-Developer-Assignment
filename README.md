@@ -1,12 +1,33 @@
 # Safe Device Settings Update
 
-A clean, decoupled full-stack architecture implementing `apply_update(current, actor, request)` for learning devices, accompanied by a dedicated Node.js backend server and an interactive React + Vite frontend console.
+An implementation of `apply_update(current, actor, request)` for learning devices adhering to strict validation ordering, optimistic concurrency control, and zero in-place mutations.
 
 **Repository URL**: [https://github.com/shiv2240/TinkerBell-Labs-Full-Stack-Developer-Assignment.git](https://github.com/shiv2240/TinkerBell-Labs-Full-Stack-Developer-Assignment.git)
 
+> **Scope & Primary Deliverable Note**:
+> * **Core Assessment (Primary Deliverable)**: The pure function [`apply_update(current, actor, request)`](backend/src/applyUpdate.js) and its table-driven automated test suite [`applyUpdate.test.js`](backend/test/applyUpdate.test.js). It is completely standalone, has zero external production dependencies, and strictly satisfies the 60-minute task handout.
+> * **Supplementary Full-Stack Harness**: The backend REST server (`backend/server.js`) and React dashboard (`frontend/`) serve as an optional, secondary visual evaluation harness to demonstrate full-stack integration and interactive scenario verification.
+
 ---
 
-## 1. Project Directory Structure
+## 1. Core Module Evaluation (Primary Scope)
+
+To evaluate the core assignment without launching any servers or UI:
+
+```bash
+# 1. Run all 47 table-driven automated unit tests (using Node.js built-in test runner)
+node --test backend/test/applyUpdate.test.js
+
+# 2. Run standalone terminal demonstration
+node backend/src/example.js
+
+# 3. Optional: Run genuine c8 code coverage analysis (100% statement/branch/line coverage)
+npm run test:coverage --prefix backend
+```
+
+---
+
+## 2. Project Directory Structure
 
 ```text
 TinkerBell Labs/
@@ -15,12 +36,12 @@ TinkerBell Labs/
 │   ├── .env.example              # Environment variables template
 │   ├── .gitignore                # Backend ignore rules
 │   ├── package.json              # Backend scripts and metadata
-│   ├── server.js                 # Standalone Node.js HTTP REST API
+│   ├── server.js                 # Supplementary Node.js HTTP REST API
 │   ├── src/
-│   │   ├── applyUpdate.js        # Core PRD validation engine & business logic
+│   │   ├── applyUpdate.js        # [CORE DELIVERABLE] Pure validation engine & business logic
 │   │   └── example.js            # Standalone CLI demonstration runner
 │   └── test/
-│       └── applyUpdate.test.js   # 47 automated unit tests (node:test)
+│       └── applyUpdate.test.js   # [CORE DELIVERABLE] 47 automated unit tests (node:test)
 │
 ├── frontend/
 │   ├── .env                      # Local frontend configuration (VITE_API_URL)
@@ -30,7 +51,7 @@ TinkerBell Labs/
 │   ├── package.json              # React & Vite dependencies
 │   ├── vite.config.js            # Vite configuration with @tailwindcss/vite
 │   └── src/
-│       ├── App.jsx               # Interactive React settings console & validation panel
+│       ├── App.jsx               # Supplementary React settings console & validation panel
 │       ├── index.css             # Tailwind CSS v4 design system
 │       └── main.jsx              # React DOM mounting
 │
@@ -45,23 +66,23 @@ TinkerBell Labs/
 
 ---
 
-## 2. Quick Start & Execution Commands
+## 3. Quick Start & Execution Commands
 
 ### Option A: From Root Workspace
 ```bash
 # Run all 47 backend automated unit tests
 npm test
 
-# Run automated tests with genuine c8 code coverage (100% coverage)
+# Run automated tests with genuine c8 code coverage
 npm run test:coverage
 
 # Run terminal demonstration
 npm run demo
 
-# Start backend server (runs on http://localhost:5001)
+# Start supplementary backend server (runs on http://localhost:5001)
 npm run backend
 
-# Start React frontend (runs on http://localhost:5173 or 5174)
+# Start supplementary React frontend (runs on http://localhost:5173 or 5174)
 npm run frontend
 ```
 
@@ -86,9 +107,9 @@ npm run dev           # Starts Vite dev server with proxy to backend
 
 ---
 
-## 3. Real API Validation Dashboard
+## 4. Real API Validation Dashboard
 
-The UI includes a compact **Validation Scenarios** dashboard on the right panel. Reviewers can click **"Run All Scenarios"** (or trigger individual scenarios via **"Run"**) to execute live HTTP requests against the backend without mocking.
+The supplementary UI includes a compact **Validation Scenarios** dashboard on the right panel. Reviewers can click **"Run All Scenarios"** (or trigger individual scenarios via **"Run"**) to execute live HTTP requests against the backend without mocking.
 
 ### Executable Scenarios:
 1. **Valid Partial Settings Update** (`HTTP 200`): Submits partial volume change for an authorized editor. Server increments version and preserves existing language.
@@ -97,13 +118,13 @@ The UI includes a compact **Validation Scenarios** dashboard on the right panel.
 4. **Non-Existent Device ID** (`HTTP 404`): Submits request targeting `D_NON_EXISTENT_99`. Identity check rejects before concurrency checks.
 5. **Stale Expected Version** (`HTTP 409`): Genuinely submits an outdated version (`current.version - 1`). Optimistic concurrency rejects update to prevent lost writes.
 6. **Invalid Volume** (`HTTP 422`): Submits fractional float (`2.5`) or boolean (`true`). Rejection occurs via integer and range constraints.
-7. **Input Immutability Guarantee** (`Node.js Unit Tests - 100% Pass`): Network HTTP boundaries serialize JSON copies; memory immutability is proven via `Object.freeze` and deep comparison in the automated test suite.
+7. **Input Immutability Guarantee** (`CLI Unit Test - Offline Reference`): Network HTTP boundaries serialize JSON copies into separate memory objects. In-memory object immutability is proven via `Object.freeze` and deep comparison in the automated test suite (`backend/test/applyUpdate.test.js`).
 
-Each scenario displays expected status, actual status, pass/fail state, and an **"Inspect"** toggle showing the sent payload, server response, latency, and explanation. Application state is protected using isolated synthetic test fixtures (`dryRun: true`).
+Each live scenario displays expected status, actual status, pass/fail state, and an **"Inspect"** toggle showing the sent payload, server response, latency, and explanation. Application state is protected using isolated synthetic test fixtures (`dryRun: true`).
 
 ---
 
-## 4. REST API Contract
+## 5. REST API Contract
 
 - `GET /api/state`: Retrieves current in-memory record and active actor.
 - `POST /api/update`: Calls `apply_update(current, actor, request)`.
@@ -118,7 +139,7 @@ Each scenario displays expected status, actual status, pass/fail state, and an *
 
 ---
 
-## 5. UI Save-Flow Requirements (8 Bullets)
+## 6. UI Save-Flow Requirements (8 Bullets)
 
 1. **Accessible Form Controls**: Form fields use explicit labels, ARIA descriptive bindings (`aria-describedby`), and support full keyboard navigation (Tab, Arrow keys, Enter).
 2. **Visual "Unsaved Changes" Indicator**: Modified fields display an amber "Unsaved" badge by continuously diffing active form state against the last confirmed server snapshot.
@@ -131,18 +152,18 @@ Each scenario displays expected status, actual status, pass/fail state, and an *
 
 ---
 
-## 6. Known Limitations
+## 7. Known Limitations
 
 - **In-Memory Ephemeral Storage**: In strict accordance with the 60-minute assessment scope, the backend stores state in memory (`serverState`) rather than a persistent external database. State resets upon server restart or via `POST /api/reset`.
 - **Single-Device Focus**: The backend model is configured around the primary learning device (`D01` on site `S01`). Supporting a fleet of devices would require routing by device ID in a persistent store.
 
 ---
 
-## 7. Actual Verification Results & Disclosures
+## 8. Actual Verification Results & Disclosures
 
-- **Automated Unit Tests**: 47 table-driven tests passed in `218ms` (`npm test`).
+- **Automated Unit Tests**: 47 table-driven tests passed in `185ms` (`npm test`).
 - **Code Coverage**: Generated with `c8` (`npm run test:coverage`), achieving **100% Statements, 100% Branches, 100% Functions, and 100% Lines** coverage on `applyUpdate.js`.
-- **Frontend Production Build**: `npm run build` compiled cleanly via Vite in `2.63s` (`dist/index.html`, `dist/assets/`).
+- **Frontend Production Build**: `npm run build` compiled cleanly via Vite in `1.45s` (`dist/index.html`, `dist/assets/`).
 - **Design Choices**: Decoupled architecture; pure dependency-free Node.js backend; modern Tailwind CSS v4 reactive UI; non-color-reliant status badges for accessibility.
 - **Time Spent**: ~60 minutes core preparation and implementation.
 - **Unfinished Work**: None.

@@ -136,9 +136,8 @@ const VALIDATION_SCENARIOS = [
     id: 'input_immutability',
     name: '7. Input Immutability Guarantee',
     isUnitTestOnly: true,
-    expectedStatus: 'Node.js Test (100% Pass)',
-    actualStatus: '47/47 Passed',
-    explanation: 'Network HTTP boundaries clone and serialize JSON payloads across the wire. In-memory object immutability (current, actor, request) is strictly verified via Object.freeze and deep property comparison in backend/test/applyUpdate.test.js.'
+    expectedStatus: 'CLI Unit Test (Suite 6)',
+    explanation: 'Network HTTP boundaries serialize JSON payloads across the wire into separate memory objects. In-memory object immutability (current, actor, request) is strictly verified via Object.freeze and deep property comparison in backend/test/applyUpdate.test.js.'
   }
 ];
 
@@ -950,8 +949,8 @@ export default function App() {
             {/* Summary Counters Bar */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4 p-3 rounded-xl bg-slate-950/80 border border-slate-800/80 text-xs">
               <div className="flex items-center justify-between px-2 py-1 bg-slate-900/60 rounded-lg">
-                <span className="text-slate-400">Total</span>
-                <span className="font-mono font-bold text-slate-200">7 Scenarios</span>
+                <span className="text-slate-400">Live API Checks</span>
+                <span className="font-mono font-bold text-slate-200">{scenarioStats.total} Scenarios</span>
               </div>
               <div className="flex items-center justify-between px-2 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
                 <span className="text-emerald-300 flex items-center gap-1 font-medium">
@@ -979,14 +978,16 @@ export default function App() {
                 const res = scenarioResults[scenario.id];
                 const isExpanded = expandedScenarioId === scenario.id;
                 const isRunning = res?.status === 'running';
-                const isPassed = scenario.isUnitTestOnly ? true : res?.status === 'passed';
-                const isFailed = res?.status === 'failed';
+                const isPassed = !scenario.isUnitTestOnly && res?.status === 'passed';
+                const isFailed = !scenario.isUnitTestOnly && res?.status === 'failed';
 
                 return (
                   <div
                     key={scenario.id}
                     className={`rounded-xl border transition p-3.5 ${
-                      isPassed
+                      scenario.isUnitTestOnly
+                        ? 'bg-slate-950/50 border-slate-800/80'
+                        : isPassed
                         ? 'bg-slate-950/70 border-emerald-500/30'
                         : isFailed
                         ? 'bg-rose-950/20 border-rose-500/40'
@@ -1001,8 +1002,8 @@ export default function App() {
                           <h4 className="text-xs font-bold text-slate-100">{scenario.name}</h4>
                           {/* Non-color reliant status badges */}
                           {scenario.isUnitTestOnly ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-sky-500/20 text-sky-300 border border-sky-500/40">
-                              ✓ UNIT TESTED
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-slate-800 text-slate-300 border border-slate-700">
+                              ℹ OFFLINE UNIT TEST
                             </span>
                           ) : isRunning ? (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
@@ -1030,9 +1031,14 @@ export default function App() {
                             Expected: <strong className="text-slate-200">{scenario.expectedStatus}</strong>
                           </span>
                           <span className="text-slate-400">
-                            Actual: <strong className={isPassed ? 'text-emerald-400' : isFailed ? 'text-rose-400' : 'text-slate-500'}>
-                              {scenario.isUnitTestOnly ? '47/47 Passing' : res?.actualStatus ? `HTTP ${res.actualStatus}` : '—'}
-                            </strong>
+                            Actual:{' '}
+                            {scenario.isUnitTestOnly ? (
+                              <span className="text-slate-400 italic">Verify in CLI via 'npm test'</span>
+                            ) : (
+                              <strong className={isPassed ? 'text-emerald-400' : isFailed ? 'text-rose-400' : 'text-slate-500'}>
+                                {res?.actualStatus ? `HTTP ${res.actualStatus}` : '— (Not run yet)'}
+                              </strong>
+                            )}
                           </span>
                           {res?.elapsed && (
                             <span className="text-slate-500 text-[10px]">({res.elapsed}ms)</span>
@@ -1169,31 +1175,54 @@ export default function App() {
               <h2 className="text-lg font-bold text-white tracking-tight">Live Response Inspector</h2>
             </div>
 
-            {/* Tabs Navigation */}
-            <div className="flex border-b border-slate-800 mb-4 overflow-x-auto whitespace-nowrap gap-1">
+            {/* Tabs Navigation (Responsive Segmented Tabs) */}
+            <div className="grid grid-cols-3 gap-1 p-1 bg-slate-950 rounded-xl border border-slate-800 mb-4" role="tablist">
               <button
                 type="button"
-                className={`py-2 px-3 text-xs font-semibold relative transition ${activeTab === 'last' ? 'text-indigo-400 border-b-2 border-indigo-500' : 'text-slate-400 hover:text-slate-200'
-                  }`}
+                role="tab"
+                aria-selected={activeTab === 'last'}
+                className={`py-2 px-1.5 text-xs font-semibold rounded-lg text-center transition flex items-center justify-center gap-1 ${
+                  activeTab === 'last'
+                    ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/30'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+                }`}
                 onClick={() => setActiveTab('last')}
               >
-                Last Execution
+                <span className="hidden sm:inline">Last Execution</span>
+                <span className="sm:hidden">Last Exec</span>
               </button>
               <button
                 type="button"
-                className={`py-2 px-3 text-xs font-semibold relative transition ${activeTab === 'outgoing' ? 'text-indigo-400 border-b-2 border-indigo-500' : 'text-slate-400 hover:text-slate-200'
-                  }`}
+                role="tab"
+                aria-selected={activeTab === 'outgoing'}
+                className={`py-2 px-1.5 text-xs font-semibold rounded-lg text-center transition flex items-center justify-center gap-1 ${
+                  activeTab === 'outgoing'
+                    ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/30'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+                }`}
                 onClick={() => setActiveTab('outgoing')}
               >
-                Live Payload Preview
+                <span className="hidden sm:inline">Live Payload</span>
+                <span className="sm:hidden">Payload</span>
               </button>
               <button
                 type="button"
-                className={`py-2 px-3 text-xs font-semibold relative transition ${activeTab === 'history' ? 'text-indigo-400 border-b-2 border-indigo-500' : 'text-slate-400 hover:text-slate-200'
-                  }`}
+                role="tab"
+                aria-selected={activeTab === 'history'}
+                className={`py-2 px-1.5 text-xs font-semibold rounded-lg text-center transition flex items-center justify-center gap-1 ${
+                  activeTab === 'history'
+                    ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/30'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+                }`}
                 onClick={() => setActiveTab('history')}
               >
-                Audit History ({filteredHistory.length}{filteredHistory.length !== auditHistory.length ? ` / ${auditHistory.length}` : ''})
+                <span>Audit</span>
+                <span className="hidden sm:inline">History</span>
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono leading-none ${
+                  activeTab === 'history' ? 'bg-indigo-700/80 text-white' : 'bg-slate-800 text-slate-300'
+                }`}>
+                  {filteredHistory.length}
+                </span>
               </button>
             </div>
 
@@ -1457,14 +1486,36 @@ export default function App() {
 
       {/* Concurrency Conflict Resolution Modal (409) */}
       {conflictData && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-end sm:items-center justify-center p-3 sm:p-4" role="dialog" aria-modal="true">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-start gap-3 p-4 sm:p-5 bg-slate-950/80 border-b border-slate-800">
-              <AlertIcon size={26} className="text-amber-400 shrink-0 mt-0.5" />
-              <div>
-                <h3 className="text-base font-bold text-white tracking-tight">Optimistic Concurrency Conflict (409)</h3>
-                <p className="text-xs text-slate-400 mt-0.5">Another user or process updated this device while you were editing.</p>
+        <div
+          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-end sm:items-center justify-center p-3 sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setConflictData(null)}
+        >
+          <div
+            className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 p-4 sm:p-5 bg-slate-950/80 border-b border-slate-800">
+              <div className="flex items-start gap-3">
+                <AlertIcon size={26} className="text-amber-400 shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="text-base font-bold text-white tracking-tight">Optimistic Concurrency Conflict (409)</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">Another user or process updated this device while you were editing.</p>
+                </div>
               </div>
+              <button
+                type="button"
+                className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 text-slate-300 transition -mr-1 -mt-1 shrink-0"
+                onClick={() => setConflictData(null)}
+                aria-label="Close conflict dialog"
+                title="Close"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
             </div>
 
             <div className="p-4 sm:p-5 flex flex-col gap-3 text-xs">

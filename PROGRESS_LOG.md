@@ -10,7 +10,7 @@
 - [x] Document AI usage constraints and review checks.
 - [x] Document the implementation plan.
 - [x] Implement `apply_update(current, actor, request)`.
-- [x] Add automated tests (45 tests, 7 suites).
+- [x] Add automated tests (47 tests across 7 suites).
 - [x] Write the runnable README and UI save-flow bullets.
 - [x] Separate project into dedicated `backend/` and `frontend/` directories.
 - [x] Implement React + Vite frontend in `frontend/`.
