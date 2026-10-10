@@ -98,6 +98,28 @@ describe("Safe Device Settings Update - apply_update", () => {
       });
     });
 
+    test("successfully updates volume at boundary limits (0 and 5)", () => {
+      const { current, actor } = getFixtures();
+
+      // Lower boundary: 0
+      const res0 = apply_update(current, actor, {
+        deviceId: "D01",
+        expectedVersion: 3,
+        settings: { volume: 0 },
+      });
+      assert.equal(res0.status, 200);
+      assert.equal(res0.record.settings.volume, 0);
+
+      // Upper boundary: 5
+      const res5 = apply_update(current, actor, {
+        deviceId: "D01",
+        expectedVersion: 3,
+        settings: { volume: 5 },
+      });
+      assert.equal(res5.status, 200);
+      assert.equal(res5.record.settings.volume, 5);
+    });
+
     test("returned record is a detached object (modifications do not affect input current)", () => {
       const { current, actor, request } = getFixtures();
       const result = apply_update(current, actor, request);
@@ -225,6 +247,16 @@ describe("Safe Device Settings Update - apply_update", () => {
         assert.deepEqual(result, { status: 422, error: "INVALID_INPUT" });
       });
     }
+
+    test("structure validation has precedence over device ID or version mismatch", () => {
+      // Missing expectedVersion AND wrong deviceId AND wrong version
+      const badStructureReq = {
+        deviceId: "D_WRONG",
+        settings: { volume: 3 },
+      };
+      const result = apply_update(current, actor, badStructureReq);
+      assert.deepEqual(result, { status: 422, error: "INVALID_INPUT" });
+    });
   });
 
   describe("4. Step 3: Settings Validation", () => {

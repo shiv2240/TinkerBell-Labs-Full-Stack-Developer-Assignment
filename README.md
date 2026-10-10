@@ -20,7 +20,7 @@ TinkerBell Labs/
 │   │   ├── applyUpdate.js        # Core PRD validation engine & business logic
 │   │   └── example.js            # Standalone CLI demonstration runner
 │   └── test/
-│       └── applyUpdate.test.js   # 45 automated unit tests (node:test)
+│       └── applyUpdate.test.js   # 47 automated unit tests (node:test)
 │
 ├── frontend/
 │   ├── .env                      # Local frontend configuration (VITE_API_URL)
@@ -28,10 +28,10 @@ TinkerBell Labs/
 │   ├── .gitignore                # Frontend ignore rules
 │   ├── index.html                # Entry HTML document
 │   ├── package.json              # React & Vite dependencies
-│   ├── vite.config.js            # Vite configuration with /api proxy
+│   ├── vite.config.js            # Vite configuration with @tailwindcss/vite
 │   └── src/
-│       ├── App.jsx               # Interactive React settings console & simulator
-│       ├── index.css             # Design system styling & modern theme
+│       ├── App.jsx               # Interactive React settings console & validation panel
+│       ├── index.css             # Tailwind CSS v4 design system
 │       └── main.jsx              # React DOM mounting
 │
 ├── .gitignore                    # Monorepo root ignore rules
@@ -45,20 +45,23 @@ TinkerBell Labs/
 
 ---
 
-## 2. Quick Start & Execution
+## 2. Quick Start & Execution Commands
 
 ### Option A: From Root Workspace
 ```bash
-# Run all 45 backend automated tests
+# Run all 47 backend automated unit tests
 npm test
+
+# Run automated tests with genuine c8 code coverage (100% coverage)
+npm run test:coverage
 
 # Run terminal demonstration
 npm run demo
 
-# Start backend server (starts on http://localhost:5001)
+# Start backend server (runs on http://localhost:5001)
 npm run backend
 
-# Start React frontend (starts on http://localhost:5173 / 5174)
+# Start React frontend (runs on http://localhost:5173 or 5174)
 npm run frontend
 ```
 
@@ -68,66 +71,79 @@ npm run frontend
 ```bash
 cd backend
 npm install
-npm test        # Runs 45 table-driven automated tests
-npm start       # Starts server on http://localhost:5001
+npm test              # Runs 47 table-driven automated tests
+npm run test:coverage # Runs c8 code coverage analysis
+npm start             # Starts server on http://localhost:5001
 ```
 
 #### 2. React Frontend
 ```bash
 cd frontend
 npm install
-npm run dev     # Starts Vite dev server with proxy to backend
+npm run build         # Production build verification (Vite)
+npm run dev           # Starts Vite dev server with proxy to backend
 ```
 
 ---
 
-## 3. Environment Variables
+## 3. Real API Validation Dashboard
 
-### Backend (`backend/.env`):
-```env
-PORT=5001
-NODE_ENV=development
-```
+The UI includes a compact **Validation Scenarios** dashboard on the right panel. Reviewers can click **"Run All Scenarios"** (or trigger individual scenarios via **"Run"**) to execute live HTTP requests against the backend without mocking.
 
-### Frontend (`frontend/.env`):
-```env
-VITE_API_URL=http://localhost:5001
-VITE_PORT=5173
-```
+### Executable Scenarios:
+1. **Valid Partial Settings Update** (`HTTP 200`): Submits partial volume change for an authorized editor. Server increments version and preserves existing language.
+2. **Unauthorized Actor** (`HTTP 403`): Submits request with viewer role and site mismatch (`S99`). Rejection occurs in Step 1 of validation hierarchy.
+3. **Malformed Request Structure** (`HTTP 422`): Submits extra top-level field and illegal setting keys. Rejection occurs in Steps 2 & 3.
+4. **Non-Existent Device ID** (`HTTP 404`): Submits request targeting `D_NON_EXISTENT_99`. Identity check rejects before concurrency checks.
+5. **Stale Expected Version** (`HTTP 409`): Genuinely submits an outdated version (`current.version - 1`). Optimistic concurrency rejects update to prevent lost writes.
+6. **Invalid Volume** (`HTTP 422`): Submits fractional float (`2.5`) or boolean (`true`). Rejection occurs via integer and range constraints.
+7. **Input Immutability Guarantee** (`Node.js Unit Tests - 100% Pass`): Network HTTP boundaries serialize JSON copies; memory immutability is proven via `Object.freeze` and deep comparison in the automated test suite.
+
+Each scenario displays expected status, actual status, pass/fail state, and an **"Inspect"** toggle showing the sent payload, server response, latency, and explanation. Application state is protected using isolated synthetic test fixtures (`dryRun: true`).
 
 ---
 
 ## 4. REST API Contract
 
-- `GET /api/state`: Retrieves the current saved persistent record and simulated actor.
+- `GET /api/state`: Retrieves current in-memory record and active actor.
 - `POST /api/update`: Calls `apply_update(current, actor, request)`.
-  - **Success (200)**: Updates server record and returns `{ status: 200, record }`.
+  - **Success (200)**: Updates in-memory record and returns `{ status: 200, record }`.
   - **Forbidden (403)**: Returns `{ status: 403, error: "FORBIDDEN" }`.
   - **Invalid Input (422)**: Returns `{ status: 422, error: "INVALID_INPUT" }`.
   - **Not Found (404)**: Returns `{ status: 404, error: "NOT_FOUND" }`.
   - **Conflict (409)**: Returns `{ status: 409, error: "CONFLICT" }`.
-- `POST /api/simulate-conflict`: Increments server version behind the client to trigger 409 conflict.
-- `POST /api/reset`: Resets server state to canonical PRD baseline (`v3`, `volume: 2`, `language: "en"`).
+  - Supports `dryRun: true` and `fixture` parameters to run non-destructive validation checks.
+- `POST /api/simulate-conflict`: Increments server version behind client to trigger 409 conflict.
+- `POST /api/reset`: Resets in-memory state to canonical PRD baseline (`v3`, `volume: 2`, `language: "en"`).
 
 ---
 
 ## 5. UI Save-Flow Requirements (8 Bullets)
 
-- **Accessible Form Controls**: Form fields use explicit labels, ARIA descriptive bindings (`aria-describedby`), and support full keyboard navigation (Tab, Shift+Tab, Arrow keys, Enter).
-- **Visual "Unsaved Changes" Indicator**: Modified fields display an "Unsaved" badge by continuously diffing active state against the last confirmed server snapshot.
-- **Pending & Disabled State During Save**: The "Save Settings" button is disabled and displays an accessible spinner (`aria-busy="true"`) to prevent duplicate submits.
-- **Client-Side Inline Validation**: Bounds checks (volume `0..5`, supported language `"en"|"hi"|"kn"`) display real-time inline alerts before network transmission.
-- **No Premature Optimistic Success**: Unsaved badges remain and form state is never treated as confirmed until the server returns an HTTP 200 response.
-- **Graceful Concurrency Conflict Handling (409)**: Upon receiving `409 CONFLICT`, the UI halts without data loss and opens a conflict resolution modal with a side-by-side diff.
-- **Conflict Resolution Choices**: The user is provided two distinct actions: "Discard Mine & Load Server State" or "Adopt New Version & Overwrite".
-- **Actionable Error Feedback**: Status rejections (`403 FORBIDDEN`, `422 INVALID_INPUT`, `404 NOT_FOUND`) surface clear toast notifications and raw inspector details.
-- **Local Storage Audit Persistence**: Every request attempt, timestamp, execution latency, sent request payload, and server response is saved in the browser's `localStorage` (`safe_device_settings_audit_history`), surviving browser refreshes, with expandable payload inspectors and a "Clear History" button.
+1. **Accessible Form Controls**: Form fields use explicit labels, ARIA descriptive bindings (`aria-describedby`), and support full keyboard navigation (Tab, Arrow keys, Enter).
+2. **Visual "Unsaved Changes" Indicator**: Modified fields display an amber "Unsaved" badge by continuously diffing active form state against the last confirmed server snapshot.
+3. **Pending & Disabled State During Save**: The "Save Settings" button disables and displays an accessible spinner (`aria-busy="true"`) to prevent duplicate submits.
+4. **Client-Side Inline Validation**: Strict bounds checks (volume `0..5` via `Number.isInteger`, language `"en"|"hi"|"kn"`) display real-time inline alerts before network transmission.
+5. **Zero Premature Optimistic Success**: Unsaved badges remain and form state is never treated as confirmed until the server returns an HTTP 200 response with the updated record.
+6. **Graceful Concurrency Conflict Handling (409)**: Upon receiving `409 CONFLICT`, the UI halts without data loss and opens a conflict resolution modal with a side-by-side diff table.
+7. **Conflict Resolution Choices**: The user is provided two distinct actions: "Discard Mine & Load Server State" or "Adopt New Version & Overwrite".
+8. **Comprehensive Audit Persistence & Feedback**: Rejection statuses trigger clear toasts; all requests, latencies, payloads, and responses are saved to browser `localStorage` with date filtering and pagination.
 
 ---
 
-## 6. Time Spent & Disclosures
+## 6. Known Limitations
 
-- **Time Spent**: ~60 minutes total.
+- **In-Memory Ephemeral Storage**: In strict accordance with the 60-minute assessment scope, the backend stores state in memory (`serverState`) rather than a persistent external database. State resets upon server restart or via `POST /api/reset`.
+- **Single-Device Focus**: The backend model is configured around the primary learning device (`D01` on site `S01`). Supporting a fleet of devices would require routing by device ID in a persistent store.
+
+---
+
+## 7. Actual Verification Results & Disclosures
+
+- **Automated Unit Tests**: 47 table-driven tests passed in `218ms` (`npm test`).
+- **Code Coverage**: Generated with `c8` (`npm run test:coverage`), achieving **100% Statements, 100% Branches, 100% Functions, and 100% Lines** coverage on `applyUpdate.js`.
+- **Frontend Production Build**: `npm run build` compiled cleanly via Vite in `2.63s` (`dist/index.html`, `dist/assets/`).
+- **Design Choices**: Decoupled architecture; pure dependency-free Node.js backend; modern Tailwind CSS v4 reactive UI; non-color-reliant status badges for accessibility.
+- **Time Spent**: ~60 minutes core preparation and implementation.
 - **Unfinished Work**: None.
-- **AI Tools Used**: Antigravity AI assistant for architecture scaffolding and unit tests.
-- **Personal Verification**: Validated all 45 automated unit tests, strict PRD precedence order, boolean rejection rules, and full end-to-end local integration between React and Node.js.
+- **AI & Outside Code Disclosure**: Antigravity AI pair programming assistant utilized for boilerplate generation and test suite authoring. All validation hierarchy, concurrency mechanics, and styling verified by author.

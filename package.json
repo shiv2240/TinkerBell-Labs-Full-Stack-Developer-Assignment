@@ -8,7 +8,8 @@
     "frontend": "npm run dev --prefix frontend",
     "build:frontend": "npm run build --prefix frontend",
     "demo": "npm run demo --prefix backend",
-    "test": "npm test --prefix backend"
+    "test": "npm test --prefix backend",
+    "test:coverage": "npm run test:coverage --prefix backend"
   },
   "keywords": [
     "optimistic-concurrency",

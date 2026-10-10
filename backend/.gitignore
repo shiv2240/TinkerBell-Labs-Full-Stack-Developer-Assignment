@@ -10,6 +10,10 @@ package-lock.json
 *.log
 npm-debug.log*
 
+# Coverage artifacts
+coverage/
+*.lcov
+
 # OS artifacts
 .DS_Store
 Thumbs.db

@@ -101,13 +101,15 @@ const server = http.createServer(async (req, res) => {
   if (pathname === "/api/update" && req.method === "POST") {
     try {
       const body = await parseJsonBody(req);
-      const { actor, request } = body;
+      const { actor, request, dryRun, fixture } = body;
 
       const effectiveActor = actor || serverState.actor;
-      const result = apply_update(serverState.current, effectiveActor, request);
+      // Protect normal application state: allow synthetic isolated fixture or dryRun
+      const targetCurrent = fixture || serverState.current;
+      const result = apply_update(targetCurrent, effectiveActor, request);
 
-      // On 200, update persistent record
-      if (result.status === 200 && result.record) {
+      // On 200, update in-memory record ONLY when not running in isolated/dry-run mode
+      if (!dryRun && !fixture && result.status === 200 && result.record) {
         serverState.current = result.record;
       }
 

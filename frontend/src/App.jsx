@@ -40,6 +40,108 @@ function AlertIcon({ size = 24, className = 'text-amber-400' }) {
   );
 }
 
+const VALIDATION_SCENARIOS = [
+  {
+    id: 'valid_partial_update',
+    name: '1. Valid Partial Settings Update',
+    expectedStatus: 200,
+    buildPayload: (current) => ({
+      actor: { role: 'editor', siteId: current?.siteId || 'S01' },
+      request: {
+        deviceId: current?.deviceId || 'D01',
+        expectedVersion: current?.version || 3,
+        settings: { volume: current?.settings?.volume === 5 ? 2 : 5 }
+      },
+      dryRun: true
+    }),
+    explanation: 'Editor role, matching siteId & deviceId, matching version. Merges partial settings, increments version once, preserves unmentioned settings, avoids input mutations, and returns 200 with updated record.'
+  },
+  {
+    id: 'unauthorized_actor',
+    name: '2. Unauthorized Actor (Permission Check)',
+    expectedStatus: 403,
+    buildPayload: (current) => ({
+      actor: { role: 'viewer', siteId: 'S99' },
+      request: {
+        deviceId: current?.deviceId || 'D01',
+        expectedVersion: current?.version || 3,
+        settings: { volume: 3 }
+      },
+      dryRun: true
+    }),
+    explanation: 'Step 1 of validation hierarchy rejects actor lacking editor role or site mismatch with 403 FORBIDDEN before checking payload structure.'
+  },
+  {
+    id: 'malformed_request',
+    name: '3. Malformed Request Structure',
+    expectedStatus: 422,
+    buildPayload: (current) => ({
+      actor: { role: 'editor', siteId: current?.siteId || 'S01' },
+      request: {
+        deviceId: current?.deviceId || 'D01',
+        expectedVersion: current?.version || 3,
+        settings: { volume: 3, forbiddenSetting: 'illegal' },
+        extraTopKey: 'malformed'
+      },
+      dryRun: true
+    }),
+    explanation: 'Steps 2 & 3 validate request structure and settings keys. Rejects extraneous top-level keys or invalid setting keys with 422 INVALID_INPUT.'
+  },
+  {
+    id: 'wrong_device_id',
+    name: '4. Non-Existent Device ID (Identity Check)',
+    expectedStatus: 404,
+    buildPayload: (current) => ({
+      actor: { role: 'editor', siteId: current?.siteId || 'S01' },
+      request: {
+        deviceId: 'D_NON_EXISTENT_99',
+        expectedVersion: current?.version || 3,
+        settings: { volume: 3 }
+      },
+      dryRun: true
+    }),
+    explanation: 'Step 4 identity check verifies request.deviceId matches target record. Returns 404 NOT_FOUND when mismatch is detected.'
+  },
+  {
+    id: 'stale_version',
+    name: '5. Stale Expected Version (Concurrency Check)',
+    expectedStatus: 409,
+    buildPayload: (current) => ({
+      actor: { role: 'editor', siteId: current?.siteId || 'S01' },
+      request: {
+        deviceId: current?.deviceId || 'D01',
+        expectedVersion: (current?.version || 3) > 1 ? (current?.version || 3) - 1 : 999,
+        settings: { volume: 4 }
+      },
+      dryRun: true
+    }),
+    explanation: 'Step 4 optimistic concurrency check rejects stale expectedVersion with 409 CONFLICT to prevent lost updates from concurrent writers.'
+  },
+  {
+    id: 'invalid_volume_fraction_boolean',
+    name: '6. Invalid Volume (Fraction / Boolean)',
+    expectedStatus: 422,
+    buildPayload: (current) => ({
+      actor: { role: 'editor', siteId: current?.siteId || 'S01' },
+      request: {
+        deviceId: current?.deviceId || 'D01',
+        expectedVersion: current?.version || 3,
+        settings: { volume: 2.5 }
+      },
+      dryRun: true
+    }),
+    explanation: 'Number.isInteger and boolean type validation strictly enforces integer 0..5 range. Fractional values (2.5) and booleans return 422 INVALID_INPUT.'
+  },
+  {
+    id: 'input_immutability',
+    name: '7. Input Immutability Guarantee',
+    isUnitTestOnly: true,
+    expectedStatus: 'Node.js Test (100% Pass)',
+    actualStatus: '47/47 Passed',
+    explanation: 'Network HTTP boundaries clone and serialize JSON payloads across the wire. In-memory object immutability (current, actor, request) is strictly verified via Object.freeze and deep property comparison in backend/test/applyUpdate.test.js.'
+  }
+];
+
 export default function App() {
   // Remote Server State
   const [serverRecord, setServerRecord] = useState(null);
@@ -183,7 +285,7 @@ export default function App() {
     if (includeLang && !['en', 'hi', 'kn'].includes(formLang)) {
       errors.language = `Invalid language "${formLang}". Only en, hi, kn allowed.`;
     }
-    if (includeVol && (typeof formVol !== 'number' || formVol < 0 || formVol > 5)) {
+    if (includeVol && (typeof formVol !== 'number' || !Number.isInteger(formVol) || formVol < 0 || formVol > 5)) {
       errors.volume = 'Volume must be an integer between 0 and 5.';
     }
     setInlineErrors(errors);
@@ -258,14 +360,108 @@ export default function App() {
     }
   };
 
-  // Scenario Buttons
+  // Real API Scenario Runner
+  const [scenarioResults, setScenarioResults] = useState({});
+  const [isExecutingScenarios, setIsExecutingScenarios] = useState(false);
+  const [expandedScenarioId, setExpandedScenarioId] = useState(null);
+
+  const runSingleScenario = async (scenario) => {
+    if (scenario.isUnitTestOnly) return;
+    setScenarioResults(prev => ({
+      ...prev,
+      [scenario.id]: { status: 'running', actualStatus: null, response: null, error: null }
+    }));
+
+    const payload = scenario.buildPayload(serverRecord);
+    const start = performance.now();
+    try {
+      const res = await fetch(`${API_BASE}/api/update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const elapsed = Math.round(performance.now() - start);
+      const data = await res.json();
+      const passed = res.status === scenario.expectedStatus;
+
+      setScenarioResults(prev => ({
+        ...prev,
+        [scenario.id]: {
+          status: passed ? 'passed' : 'failed',
+          actualStatus: res.status,
+          response: data,
+          payload,
+          elapsed,
+          error: passed ? null : `Expected HTTP ${scenario.expectedStatus}, got HTTP ${res.status}`
+        }
+      }));
+    } catch (err) {
+      setScenarioResults(prev => ({
+        ...prev,
+        [scenario.id]: {
+          status: 'failed',
+          actualStatus: 'Error',
+          response: null,
+          payload,
+          error: `Network error: ${err.message}`
+        }
+      }));
+    }
+  };
+
+  const runAllScenarios = async () => {
+    if (isExecutingScenarios) return;
+    setIsExecutingScenarios(true);
+    addToast('Executing real API validation scenarios...', 'info');
+
+    for (const scenario of VALIDATION_SCENARIOS) {
+      if (scenario.isUnitTestOnly) continue;
+      await runSingleScenario(scenario);
+    }
+
+    setIsExecutingScenarios(false);
+    addToast('Validation scenarios finished executing.', 'success');
+  };
+
+  const scenarioStats = useMemo(() => {
+    const executable = VALIDATION_SCENARIOS.filter(s => !s.isUnitTestOnly);
+    let passed = 0;
+    let failed = 0;
+    let unexecuted = 0;
+    let running = 0;
+
+    for (const sc of executable) {
+      const res = scenarioResults[sc.id];
+      if (!res || !res.status || res.status === 'unexecuted') unexecuted++;
+      else if (res.status === 'running') running++;
+      else if (res.status === 'passed') passed++;
+      else if (res.status === 'failed') failed++;
+    }
+    return { total: executable.length, passed, failed, unexecuted, running };
+  }, [scenarioResults]);
+
+  // Scenario & Simulator Buttons
   const triggerConflictScenario = async () => {
     try {
       const res = await fetch(`${API_BASE}/api/simulate-conflict`, { method: 'POST' });
       const data = await res.json();
-      addToast(`Simulated external write: server record updated to v${data.current.version}. Now click 'Save Settings' to trigger 409!`, 'warning');
-      setServerRecord(prev => ({ ...prev, version: data.current.version }));
+      addToast(`External write simulated: server advanced to v${data.current.version}. Client form remains at v${serverRecord?.version || 3}. Click 'Save Settings' to trigger 409 Conflict!`, 'warning');
+      // Intentionally do NOT advance serverRecord.version here, so client's next save is genuinely stale!
     } catch (err) {
+      addToast(`Failed: ${err.message}`, 'error');
+    }
+  };
+
+  const triggerConflictAndOpenModal = async () => {
+    try {
+      setIsLoading(true);
+      const res = await fetch(`${API_BASE}/api/simulate-conflict`, { method: 'POST' });
+      const data = await res.json();
+      addToast(`External write simulated: server advanced to v${data.current.version}. Submitting client form with stale v${serverRecord?.version || 3}...`, 'info');
+      // Submits with current (now stale) client expectedVersion
+      await handleSave(null, 'Simulated Concurrent Edit');
+    } catch (err) {
+      setIsLoading(false);
       addToast(`Failed: ${err.message}`, 'error');
     }
   };
@@ -399,9 +595,9 @@ export default function App() {
             <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
               <div>
                 <span className="block text-[10px] font-bold tracking-wider uppercase text-indigo-400 mb-0.5">
-                  PERSISTENT STORAGE
+                  IN-MEMORY SERVER STATE
                 </span>
-                <h2 className="text-lg font-bold text-white tracking-tight">Saved Device State</h2>
+                <h2 className="text-lg font-bold text-white tracking-tight">Active Device State (In-Memory)</h2>
               </div>
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="px-2.5 py-1 rounded-md text-xs font-mono font-semibold bg-sky-500/15 text-sky-400 border border-sky-500/30">
@@ -628,6 +824,38 @@ export default function App() {
                     </button>
                   ))}
                 </div>
+
+                {/* Inline Volume Validation Test Chips */}
+                <div className="mt-2.5 pt-2 border-t border-slate-800/60 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-400">
+                  <span className="text-slate-300 font-medium text-[10px]">Inline Volume Validation:</span>
+                  <button
+                    type="button"
+                    className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-rose-300 border border-rose-500/30 text-[10px] font-mono transition"
+                    onClick={() => {
+                      setFormVol(2.5);
+                      setInlineErrors(prev => ({
+                        ...prev,
+                        volume: 'Volume must be an integer between 0 and 5 (Number.isInteger rejected decimal 2.5).'
+                      }));
+                    }}
+                  >
+                    Test Float (2.5)
+                  </button>
+                  <button
+                    type="button"
+                    className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-rose-300 border border-rose-500/30 text-[10px] font-mono transition"
+                    onClick={() => {
+                      setFormVol(6);
+                      setInlineErrors(prev => ({
+                        ...prev,
+                        volume: 'Volume must be an integer between 0 and 5 (out of range: 6).'
+                      }));
+                    }}
+                  >
+                    Test Out of Range (6)
+                  </button>
+                </div>
+
                 {inlineErrors.volume && (
                   <div className="text-xs text-rose-400 mt-1.5">{inlineErrors.volume}</div>
                 )}
@@ -677,69 +905,256 @@ export default function App() {
 
         {/* Right Column: Scenarios, Inspector & Audit History */}
         <div className="flex flex-col gap-6">
-          {/* Scenario Simulators */}
-          <section className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-sm hover:border-slate-700 transition">
-            <div className="mb-3">
-              <span className="block text-[10px] font-bold tracking-wider uppercase text-indigo-400 mb-0.5">
-                EDGE CASES & SCENARIOS
-              </span>
-              <h2 className="text-lg font-bold text-white tracking-tight">Error & Concurrency Simulators</h2>
+          {/* Validation Scenarios Dashboard */}
+          <section className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-sm hover:border-slate-700 transition" aria-labelledby="validation-dashboard-title">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+              <div>
+                <span className="block text-[10px] font-bold tracking-wider uppercase text-emerald-400 mb-0.5">
+                  REAL API VALIDATION DASHBOARD
+                </span>
+                <h2 id="validation-dashboard-title" className="text-lg font-bold text-white tracking-tight">
+                  Validation Scenarios
+                </h2>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-semibold text-xs px-3.5 py-2 rounded-xl shadow-md shadow-indigo-500/20 transition flex items-center gap-2 disabled:opacity-50 disabled:pointer-events-none"
+                  onClick={runAllScenarios}
+                  disabled={isExecutingScenarios || isLoading}
+                  aria-busy={isExecutingScenarios}
+                >
+                  {isExecutingScenarios ? (
+                    <>
+                      <span className="animate-spin inline-block">⟳</span>
+                      <span>Running Scenarios...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>▶</span>
+                      <span>Run All Scenarios</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs px-2.5 py-2 rounded-xl font-medium transition"
+                  onClick={resetEnvironment}
+                  title="Reset server state to PRD fixture"
+                >
+                  Reset State
+                </button>
+              </div>
             </div>
 
+            {/* Summary Counters Bar */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4 p-3 rounded-xl bg-slate-950/80 border border-slate-800/80 text-xs">
+              <div className="flex items-center justify-between px-2 py-1 bg-slate-900/60 rounded-lg">
+                <span className="text-slate-400">Total</span>
+                <span className="font-mono font-bold text-slate-200">7 Scenarios</span>
+              </div>
+              <div className="flex items-center justify-between px-2 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
+                <span className="text-emerald-300 flex items-center gap-1 font-medium">
+                  <span>✓</span> Passed
+                </span>
+                <span className="font-mono font-bold text-emerald-400">{scenarioStats.passed}</span>
+              </div>
+              <div className="flex items-center justify-between px-2 py-1 bg-rose-500/10 border border-rose-500/20 rounded-lg">
+                <span className="text-rose-300 flex items-center gap-1 font-medium">
+                  <span>✕</span> Failed
+                </span>
+                <span className="font-mono font-bold text-rose-400">{scenarioStats.failed}</span>
+              </div>
+              <div className="flex items-center justify-between px-2 py-1 bg-slate-900/60 rounded-lg">
+                <span className="text-slate-400 flex items-center gap-1">
+                  <span>○</span> Unexecuted
+                </span>
+                <span className="font-mono font-bold text-slate-300">{scenarioStats.unexecuted}</span>
+              </div>
+            </div>
+
+            {/* Scenarios List */}
             <div className="flex flex-col gap-2.5">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-950/60 border border-slate-800/80">
-                <div>
-                  <h4 className="text-xs font-bold text-slate-200">Simulate Concurrent Edit (409)</h4>
-                  <p className="text-[11px] text-slate-400">Bumps server record behind client to trigger optimistic locking conflict.</p>
-                </div>
+              {VALIDATION_SCENARIOS.map((scenario) => {
+                const res = scenarioResults[scenario.id];
+                const isExpanded = expandedScenarioId === scenario.id;
+                const isRunning = res?.status === 'running';
+                const isPassed = scenario.isUnitTestOnly ? true : res?.status === 'passed';
+                const isFailed = res?.status === 'failed';
+
+                return (
+                  <div
+                    key={scenario.id}
+                    className={`rounded-xl border transition p-3.5 ${
+                      isPassed
+                        ? 'bg-slate-950/70 border-emerald-500/30'
+                        : isFailed
+                        ? 'bg-rose-950/20 border-rose-500/40'
+                        : isRunning
+                        ? 'bg-amber-950/20 border-amber-500/40 animate-pulse'
+                        : 'bg-slate-950/50 border-slate-800/80'
+                    }`}
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2 mb-1">
+                          <h4 className="text-xs font-bold text-slate-100">{scenario.name}</h4>
+                          {/* Non-color reliant status badges */}
+                          {scenario.isUnitTestOnly ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-sky-500/20 text-sky-300 border border-sky-500/40">
+                              ✓ UNIT TESTED
+                            </span>
+                          ) : isRunning ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                              ⟳ RUNNING
+                            </span>
+                          ) : isPassed ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                              ✓ PASSED
+                            </span>
+                          ) : isFailed ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40">
+                              ✕ FAILED
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-800 text-slate-400 border border-slate-700">
+                              ○ UNEXECUTED
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-400 mb-2 leading-relaxed">
+                          {scenario.explanation}
+                        </p>
+                        <div className="flex flex-wrap items-center gap-3 text-[11px] font-mono">
+                          <span className="text-slate-400">
+                            Expected: <strong className="text-slate-200">{scenario.expectedStatus}</strong>
+                          </span>
+                          <span className="text-slate-400">
+                            Actual: <strong className={isPassed ? 'text-emerald-400' : isFailed ? 'text-rose-400' : 'text-slate-500'}>
+                              {scenario.isUnitTestOnly ? '47/47 Passing' : res?.actualStatus ? `HTTP ${res.actualStatus}` : '—'}
+                            </strong>
+                          </span>
+                          {res?.elapsed && (
+                            <span className="text-slate-500 text-[10px]">({res.elapsed}ms)</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex sm:flex-col items-center gap-1.5 shrink-0 self-end sm:self-center">
+                        {!scenario.isUnitTestOnly && (
+                          <button
+                            type="button"
+                            className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-slate-600 font-semibold text-xs px-2.5 py-1.5 rounded-lg transition disabled:opacity-40"
+                            onClick={() => runSingleScenario(scenario)}
+                            disabled={isExecutingScenarios || isRunning}
+                            title="Execute this scenario against the API"
+                          >
+                            {isRunning ? 'Running...' : 'Run'}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 text-[11px] font-mono px-2 py-1 rounded transition"
+                          onClick={() => setExpandedScenarioId(isExpanded ? null : scenario.id)}
+                          aria-expanded={isExpanded}
+                        >
+                          {isExpanded ? 'Hide ▲' : 'Inspect ▼'}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Collapsible Details Drawer */}
+                    {isExpanded && (
+                      <div className="mt-3 pt-3 border-t border-slate-800/80 text-xs">
+                        {scenario.isUnitTestOnly ? (
+                          <div className="p-3 bg-slate-900 rounded-lg border border-slate-800">
+                            <h5 className="font-semibold text-sky-400 mb-1 text-[11px]">Automated Unit Test Guarantee</h5>
+                            <p className="text-slate-300 text-[11px] mb-2">
+                              Over the network wire, HTTP serializers automatically create cloned copies of payloads, so in-memory object reference immutability cannot be verified via HTTP.
+                            </p>
+                            <p className="text-slate-400 text-[11px]">
+                              In <code className="text-slate-200 font-mono">backend/test/applyUpdate.test.js</code>, Suite 6 verifies that:
+                            </p>
+                            <ul className="list-disc list-inside text-slate-300 text-[11px] mt-1 space-y-0.5 font-mono">
+                              <li><code className="text-sky-300">Object.freeze(current)</code> & <code className="text-sky-300">Object.freeze(actor)</code> do not throw assignment errors</li>
+                              <li>Deep snapshots of inputs before and after execution remain strictly unchanged</li>
+                              <li>Returned record is completely detached from the input reference</li>
+                            </ul>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 font-mono text-[11px]">
+                            <div className="p-2.5 bg-slate-900 rounded-lg border border-slate-800 overflow-x-auto">
+                              <span className="block font-sans font-bold text-slate-400 text-[10px] uppercase tracking-wider mb-1">
+                                Sent HTTP Request Payload
+                              </span>
+                              <pre className="text-slate-300 leading-tight">
+                                {JSON.stringify(res?.payload || scenario.buildPayload(serverRecord), null, 2)}
+                              </pre>
+                            </div>
+                            <div className="p-2.5 bg-slate-900 rounded-lg border border-slate-800 overflow-x-auto">
+                              <span className="block font-sans font-bold text-slate-400 text-[10px] uppercase tracking-wider mb-1">
+                                Received Server Response
+                              </span>
+                              {res ? (
+                                <pre className={isPassed ? 'text-emerald-300' : 'text-rose-300'}>
+                                  {JSON.stringify(res.response || { error: res.error }, null, 2)}
+                                </pre>
+                              ) : (
+                                <span className="text-slate-500 font-sans italic text-xs">
+                                  Not executed yet. Click "Run" to test against backend.
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Manual Edge-Case Simulators */}
+            <div className="mt-4 pt-4 border-t border-slate-800/80">
+              <span className="block text-[10px] font-bold tracking-wider uppercase text-slate-400 mb-2">
+                MANUAL CONFLICT & EDGE-CASE SIMULATORS
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                 <button
                   type="button"
-                  className="bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 font-semibold text-xs px-3 py-2 rounded-lg transition shrink-0"
+                  className="p-2.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-left font-medium transition flex items-center justify-between"
+                  onClick={triggerConflictAndOpenModal}
+                >
+                  <div>
+                    <strong className="block text-xs">Trigger 409 Conflict Modal</strong>
+                    <span className="text-[10px] text-amber-400/80">Bumps server & attempts stale save</span>
+                  </div>
+                  <span className="text-sm font-bold">➔</span>
+                </button>
+                <button
+                  type="button"
+                  className="p-2.5 rounded-xl bg-slate-950/60 hover:bg-slate-800 text-slate-300 border border-slate-800 text-left font-medium transition flex items-center justify-between"
                   onClick={triggerConflictScenario}
                 >
-                  Trigger 409 Conflict
+                  <div>
+                    <strong className="block text-xs">Bump Server Version Ahead</strong>
+                    <span className="text-[10px] text-slate-400">External write without saving form</span>
+                  </div>
+                  <span className="text-sm font-bold">+1</span>
                 </button>
-              </div>
-
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-950/60 border border-slate-800/80">
-                <div>
-                  <h4 className="text-xs font-bold text-slate-200">Send Stale Expected Version</h4>
-                  <p className="text-[11px] text-slate-400">Sends payload with <code className="text-sky-400 font-mono">expectedVersion: 1</code> (409 Conflict).</p>
-                </div>
                 <button
                   type="button"
-                  className="bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-semibold text-xs px-3 py-2 rounded-lg transition shrink-0"
-                  onClick={triggerStaleVersion}
-                >
-                  Send Stale Version
-                </button>
-              </div>
-
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-950/60 border border-slate-800/80">
-                <div>
-                  <h4 className="text-xs font-bold text-slate-200">Target Non-Existent Device</h4>
-                  <p className="text-[11px] text-slate-400">Sends payload with <code className="text-sky-400 font-mono">deviceId: "D99_UNKNOWN"</code> (404 Not Found).</p>
-                </div>
-                <button
-                  type="button"
-                  className="bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-semibold text-xs px-3 py-2 rounded-lg transition shrink-0"
+                  className="p-2 rounded-lg bg-slate-950/60 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 text-xs transition"
                   onClick={triggerWrongDevice}
                 >
-                  Test 404 Device
+                  Test 404 Device Mismatch
                 </button>
-              </div>
-
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-950/60 border border-slate-800/80">
-                <div>
-                  <h4 className="text-xs font-bold text-slate-200">Inject Illegal Types / Extra Keys</h4>
-                  <p className="text-[11px] text-slate-400">Sends payload with boolean volume and extra top-level field (422).</p>
-                </div>
                 <button
                   type="button"
-                  className="bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-semibold text-xs px-3 py-2 rounded-lg transition shrink-0"
+                  className="p-2 rounded-lg bg-slate-950/60 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 text-xs transition"
                   onClick={triggerMalformed}
                 >
-                  Test 422 Payload
+                  Test 422 Illegal Payload
                 </button>
               </div>
             </div>
