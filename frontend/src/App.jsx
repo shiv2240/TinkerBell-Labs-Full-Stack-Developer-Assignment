@@ -715,64 +715,55 @@ export default function App() {
                 </div>
 
                 {auditHistory.length > 0 ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', maxHeight: '340px', overflowY: 'auto' }}>
+                  <div className="history-list-wrapper">
                     {auditHistory.map(entry => {
                       const isExpanded = expandedHistoryId === entry.id;
                       return (
                         <div
                           key={entry.id}
-                          style={{
-                            background: 'var(--bg-card-subtle)',
-                            border: `1px solid ${isExpanded ? 'var(--border-focus)' : 'var(--border-subtle)'}`,
-                            borderRadius: '8px',
-                            overflow: 'hidden',
-                            transition: 'border-color 0.15s ease'
-                          }}
+                          className={`history-card-item ${isExpanded ? 'is-expanded' : ''}`}
                         >
                           <div
                             onClick={() => setExpandedHistoryId(isExpanded ? null : entry.id)}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              padding: '0.65rem 0.85rem',
-                              cursor: 'pointer',
-                              userSelect: 'none'
-                            }}
+                            className="history-item-header"
                           >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.74rem', color: 'var(--text-dim)' }}>
+                            <div className="history-meta-left">
+                              <span className="history-time-stamp">
                                 {entry.time}
                               </span>
-                              <span className={`status-badge status-${entry.status}`}>{entry.status}</span>
-                              <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{entry.source}</span>
+                              <span className={`status-badge status-${entry.status}`}>
+                                {entry.status}
+                              </span>
+                              <span className="history-trigger-tag">
+                                {entry.source}
+                              </span>
                             </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.74rem', color: 'var(--text-dim)' }}>
+                            <div className="history-meta-right">
+                              <span className="history-duration-badge">
                                 {entry.elapsed}ms
                               </span>
-                              <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>
+                              <span className="history-chevron">
                                 {isExpanded ? '▲' : '▼'}
                               </span>
                             </div>
                           </div>
 
                           {isExpanded && (
-                            <div style={{ padding: '0.75rem', background: '#090d16', borderTop: '1px solid var(--border-subtle)', fontSize: '0.75rem' }}>
-                              <div style={{ marginBottom: '0.6rem' }}>
-                                <div style={{ color: 'var(--text-dim)', marginBottom: '0.2rem', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', fontSize: '0.68rem' }}>
+                            <div className="history-expanded-body">
+                              <div className="history-payload-section">
+                                <div className="history-payload-label">
                                   Sent Request Payload:
                                 </div>
-                                <pre style={{ fontFamily: 'var(--font-mono)', color: '#38bdf8', whiteSpace: 'pre-wrap', maxHeight: '120px', overflowY: 'auto' }}>
+                                <pre className="history-json-box history-json-request">
                                   {JSON.stringify(entry.request, null, 2)}
                                 </pre>
                               </div>
 
-                              <div>
-                                <div style={{ color: 'var(--text-dim)', marginBottom: '0.2rem', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', fontSize: '0.68rem' }}>
+                              <div className="history-payload-section">
+                                <div className="history-payload-label">
                                   Server Response ({entry.status}):
                                 </div>
-                                <pre style={{ fontFamily: 'var(--font-mono)', color: '#a7f3d0', whiteSpace: 'pre-wrap', maxHeight: '120px', overflowY: 'auto' }}>
+                                <pre className="history-json-box history-json-response">
                                   {JSON.stringify(entry.response, null, 2)}
                                 </pre>
                               </div>

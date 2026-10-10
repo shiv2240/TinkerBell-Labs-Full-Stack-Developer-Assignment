@@ -658,18 +658,151 @@ body {
 .status-card.status-422 { background: rgba(244, 63, 94, 0.12); border: 1px solid rgba(244, 63, 94, 0.35); }
 
 .status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-family: var(--font-mono);
   font-weight: 700;
-  font-size: 0.82rem;
-  padding: 0.2rem 0.55rem;
+  font-size: 0.8rem;
+  line-height: 1;
+  padding: 0.25rem 0.6rem;
   border-radius: 4px;
+  letter-spacing: 0.02em;
 }
 
-.status-200 .status-badge { background: #10b981; color: #fff; }
-.status-403 .status-badge { background: #f43f5e; color: #fff; }
-.status-404 .status-badge { background: #0ea5e9; color: #fff; }
-.status-409 .status-badge { background: #f59e0b; color: #000; }
-.status-422 .status-badge { background: #f43f5e; color: #fff; }
+.status-badge.status-200, .status-200 .status-badge { background: #10b981; color: #ffffff; }
+.status-badge.status-403, .status-403 .status-badge { background: #f43f5e; color: #ffffff; }
+.status-badge.status-404, .status-404 .status-badge { background: #0ea5e9; color: #ffffff; }
+.status-badge.status-409, .status-409 .status-badge { background: #f59e0b; color: #0b0f19; font-weight: 800; }
+.status-badge.status-422, .status-422 .status-badge { background: #ef4444; color: #ffffff; }
+
+/* Audit History Dedicated Styling */
+.history-list-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-height: 380px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.history-card-item {
+  background: var(--bg-card-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  transition: all 0.2s ease;
+  line-height: 1.5;
+}
+
+.history-card-item:hover {
+  border-color: var(--border-medium);
+  background: rgba(23, 32, 51, 0.95);
+}
+
+.history-card-item.is-expanded {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.2);
+}
+
+.history-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 1rem;
+  cursor: pointer;
+  user-select: none;
+  gap: 0.75rem;
+  min-height: 48px;
+}
+
+.history-meta-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.history-time-stamp {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: #94a3b8;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.history-trigger-tag {
+  font-size: 0.86rem;
+  color: #f1f5f9;
+  font-weight: 600;
+}
+
+.history-meta-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  white-space: nowrap;
+}
+
+.history-duration-badge {
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  color: #94a3b8;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  border: 1px solid var(--border-subtle);
+}
+
+.history-chevron {
+  font-size: 0.8rem;
+  color: #94a3b8;
+  display: inline-block;
+}
+
+.history-expanded-body {
+  padding: 1rem;
+  background: #090d16;
+  border-top: 1px solid var(--border-subtle);
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.history-payload-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.history-payload-label {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  color: #94a3b8;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.history-json-box {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  line-height: 1.45;
+  overflow-x: auto;
+  max-height: 160px;
+}
+
+.history-json-request {
+  color: #38bdf8;
+}
+
+.history-json-response {
+  color: #a7f3d0;
+}
 
 .code-box {
   background: #090d16;
