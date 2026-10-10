@@ -2,6 +2,8 @@
 
 A clean, decoupled full-stack architecture implementing `apply_update(current, actor, request)` for learning devices, accompanied by a dedicated Node.js backend server and an interactive React + Vite frontend console.
 
+**Repository URL**: [https://github.com/shiv2240/TinkerBell-Labs-Full-Stack-Developer-Assignment.git](https://github.com/shiv2240/TinkerBell-Labs-Full-Stack-Developer-Assignment.git)
+
 ---
 
 ## 1. Project Directory Structure
